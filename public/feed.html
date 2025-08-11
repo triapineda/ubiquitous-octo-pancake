@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>IG Feed</title>
+  <style>
+    body {
+      background: white;
+      margin: 0;
+      font-family: sans-serif;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+    }
+    .grid img {
+      width: 100%;
+      aspect-ratio: 4 / 5;
+      object-fit: cover;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="grid" id="grid"></div>
+
+  <script>
+    async function loadPosts() {
+      const res = await fetch('/api/posts');
+      const data = await res.json();
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+      if (data.posts && data.posts.length) {
+        data.posts.forEach(post => {
+          const img = document.createElement('img');
+          img.src = post.image;
+          grid.appendChild(img);
+        });
+      } else {
+        for (let i = 0; i < 9; i++) {
+          const placeholder = document.createElement('div');
+          placeholder.style.background = '#eee';
+          placeholder.style.aspectRatio = '4 / 5';
+          grid.appendChild(placeholder);
+        }
+      }
+    }
+    loadPosts();
+  </script>
+</body>
+</html>
