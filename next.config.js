@@ -1,23 +1,18 @@
+// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
   async headers() {
     return [
       {
-        source: "/:path*",
+        source: '/(.*)',
         headers: [
-          {
-            key: "Content-Security-Policy",
-            value:
-              "frame-ancestors 'self' https://*.notion.so https://*.notion.site https://notion.so https://notion.site;",
-          },
-          // Non-standard but widely accepted to allow iframes
-          { key: "X-Frame-Options", value: "ALLOWALL" },
-          { key: "Referrer-Policy", value: "no-referrer-when-downgrade" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Allow this site to be iframed by Notion
+          { key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://www.notion.so https://notion.so https://*.notion.so https://*.notion.site" }
+          // Do NOT set X-Frame-Options here. Leave it out entirely.
         ],
       },
     ];
   },
-};
-module.exports = nextConfig;
+}
+module.exports = nextConfig
