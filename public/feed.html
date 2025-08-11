@@ -1,22 +1,29 @@
 <!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>IG Grid — Notion (read-only)</title>
+<title>IG Grid — Notion (v3)</title>
 <style>
 :root{--gap:1px;--tile-aspect:4/5;--bg:#fff;--fg:#111}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
 .app{max-width:980px;margin:0 auto;padding:12px}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--gap);min-height:360px;background:#fff}
-.tile{position:relative;width:100%;aspect-ratio:var(--tile-aspect);overflow:hidden;background:#fff}
+.badge{font-size:12px;color:#6b7280;margin:0 0 8px 0}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:#fff}
+.tile{position:relative;width:100%;aspect-ratio:4/5;overflow:hidden;background:#fff}
 .tile img{width:100%;height:100%;object-fit:cover;display:block;-webkit-user-drag:none;user-select:none}
 .ph{background:#f3f4f6}
 .err{margin-top:10px;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:10px 12px;border-radius:6px;display:none}
-.note{margin-top:8px;color:#6b7280;font-size:12px}
 </style>
 </head><body>
 <div class="app">
-  <div id="grid" class="grid" aria-live="polite" aria-busy="false"></div>
+  <div class="badge">Feed v3 • If you see 9 gray boxes, the embed is working.</div>
+
+  <!-- Static placeholders so the grid is ALWAYS visible -->
+  <div id="grid" class="grid" aria-live="polite" aria-busy="false">
+    <div class="tile ph"></div><div class="tile ph"></div><div class="tile ph"></div>
+    <div class="tile ph"></div><div class="tile ph"></div><div class="tile ph"></div>
+    <div class="tile ph"></div><div class="tile ph"></div><div class="tile ph"></div>
+  </div>
+
   <div id="err" class="err"></div>
-  <div class="note">This grid reads from your Notion DB via /api/posts. Images are served via /api/proxy for Notion embeds.</div>
 </div>
 
 <script>
@@ -25,79 +32,59 @@ const grid = document.getElementById('grid');
 const errBox = document.getElementById('err');
 const API = (new URLSearchParams(location.search).get('endpoint')) || (location.origin + '/api/posts');
 
-function showErr(msg){
-  errBox.textContent = msg || '';
-  errBox.style.display = msg ? 'block' : 'none';
-}
+function showErr(msg){ errBox.textContent = msg || ''; errBox.style.display = msg ? 'block' : 'none'; }
 function clearErr(){ showErr(''); }
 
-// Always draw placeholders first so Notion embeds never look blank
-function drawPlaceholders(count = 9){
-  grid.innerHTML = '';
-  for (let i=0;i<count;i++){
-    const ph = document.createElement('div');
-    ph.className = 'tile ph';
-    grid.appendChild(ph);
+function fillPlaceholdersTo(count){
+  const current = grid.children.length;
+  for(let i=current;i<count;i++){
+    const ph = document.createElement('div'); ph.className='tile ph'; grid.appendChild(ph);
   }
 }
 
-// Robust image element that falls back to original URL if proxy fails
 function makeImageTile(src, link){
   const t = document.createElement('div');
   t.className = 'tile';
   const content = link ? document.createElement('a') : document.createElement('div');
   if (link){ content.href = link; content.target = '_blank'; content.rel = 'noopener noreferrer'; }
   const img = document.createElement('img');
-  img.alt = '';
-  img.loading = 'lazy';
+  img.alt = ''; img.loading = 'lazy';
 
   const proxied = '/api/proxy?src=' + encodeURIComponent(src);
   img.src = proxied;
 
-  // If proxy fails, try direct URL (helps when proxy is too strict)
+  // Fallback to original if proxy fails
   img.addEventListener('error', () => {
-    if (img.dataset.triedFallback === '1') return;
-    img.dataset.triedFallback = '1';
+    if (img.dataset.fallback === '1') return;
+    img.dataset.fallback = '1';
     img.referrerPolicy = 'no-referrer';
     img.src = src;
   });
 
-  content.appendChild(img);
-  t.appendChild(content);
+  content.appendChild(img); t.appendChild(content);
   return t;
 }
 
-// Render posts (with placeholders to complete rows)
 function render(posts){
   grid.setAttribute('aria-busy', 'true');
   grid.innerHTML = '';
-
   posts.forEach(p => grid.appendChild(makeImageTile(p.image, p.link || '')));
-
-  const total = Math.max(9, Math.ceil(posts.length / 3) * 3);
-  for (let i = posts.length; i < total; i++){
-    const ph = document.createElement('div');
-    ph.className = 'tile ph';
-    grid.appendChild(ph);
-  }
+  const total = Math.max(9, Math.ceil(posts.length/3)*3);
+  fillPlaceholdersTo(total);
   grid.setAttribute('aria-busy', 'false');
 }
 
 async function load(){
   clearErr();
   try{
-    // draw placeholders immediately so embed never appears empty
-    drawPlaceholders(9);
-
-    const res = await fetch(API, { method: 'GET' });
-    if (!res.ok) throw new Error('HTTP ' + res.status + ' from ' + API);
+    const res = await fetch(API, { method:'GET' });
+    if(!res.ok) throw new Error('HTTP '+res.status+' from '+API);
     const json = await res.json();
     const posts = Array.isArray(json.posts) ? json.posts.filter(p => p && p.image) : [];
-
     render(posts);
   }catch(ex){
-    showErr('Failed to load posts. ' + (ex?.message || ex));
-    // keep placeholders visible
+    showErr('Failed to load posts: ' + (ex?.message || ex));
+    // leave the static placeholders in place
   }
 }
 
