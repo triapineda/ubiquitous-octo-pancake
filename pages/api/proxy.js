@@ -1,47 +1,38 @@
-<script>
-(()=>{ "use strict";
-const grid=document.getElementById('grid');
-const err=document.getElementById('err');
-const API=(new URLSearchParams(location.search).get('endpoint')) || (location.origin + '/api/posts');
+export default async function handler(req, res) {
+  try {
+    const { src } = req.query;
+    if (!src || typeof src !== "string") {
+      res.status(400).send("Missing src");
+      return;
+    }
+    const url = new URL(src);
+    if (url.protocol !== "https:") {
+      res.status(400).send("Only https URLs are allowed");
+      return;
+    }
 
-function showErr(m){ if(!err) return; err.textContent=m||''; err.style.display=m?'block':'none'; }
-function clearErr(){ showErr(''); }
-function tileCount(n){ return Math.max(9, Math.ceil(n/3)*3); }
+    // Follow redirects; some Notion/S3 URLs redirect
+    const upstream = await fetch(src, {
+      redirect: "follow",
+      headers: { "accept": "image/*" }
+    });
 
-function render(posts){
-  grid.setAttribute('aria-busy','true');
-  grid.innerHTML='';
-  const count=tileCount(posts.length);
+    if (!upstream.ok) {
+      res.status(upstream.status).send(`Upstream fetch failed (${upstream.status})`);
+      return;
+    }
 
-  posts.forEach(p=>{
-    const t=document.createElement('div');
-    t.className='tile';
-    const content = p.link ? document.createElement('a') : document.createElement('div');
-    if (p.link){ content.href=p.link; content.target='_blank'; content.rel='noopener noreferrer'; }
-    const img=document.createElement('img'); img.alt=''; img.loading='lazy';
-    img.src = '/api/proxy?src=' + encodeURIComponent(p.image);  // ← proxied
-    content.appendChild(img); t.appendChild(content); grid.appendChild(t);
-  });
+    // Pass through content-type, cache a bit
+    const ct = upstream.headers.get("content-type") || "application/octet-stream";
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400");
+    // Allow embedding anywhere (Notion iframe, etc.)
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
-  for(let i=posts.length;i<count;i++){
-    const ph=document.createElement('div'); ph.className='tile ph'; grid.appendChild(ph);
-  }
-  grid.setAttribute('aria-busy','false');
-}
-
-async function load(){
-  clearErr();
-  try{
-    const res=await fetch(API, { method:'GET' });
-    if(!res.ok) throw new Error('HTTP '+res.status+' from '+API);
-    const json=await res.json();
-    const posts = Array.isArray(json.posts) ? json.posts.filter(p=>p && p.image) : [];
-    render(posts);
-  }catch(ex){
-    showErr('Failed to load: ' + (ex?.message || ex));
-    render([]); // still show placeholders
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    res.status(200).send(buf);
+  } catch (e) {
+    console.error("Proxy error:", e);
+    res.status(500).send("Proxy error");
   }
 }
-load();
-})();
-</script>
